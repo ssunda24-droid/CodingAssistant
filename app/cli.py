@@ -2,6 +2,7 @@
 from app.agent import Agent
 from app.providers.ollama import OllamaProvider
 from app.tools.registry import ToolRegistry
+from app.mcp.rag.tools import search_coding_standards
 from app.tools.terminal import run_command
 from app.tools.filesystem import (
     read_file,
@@ -189,6 +190,26 @@ def build_registry() -> ToolRegistry:
                 },
             },
             "required": ["libraryId", "query"],
+        },
+    )
+
+    registry.register(
+        name="search_coding_standards",
+        function=search_coding_standards,
+        description=(
+            "Search project-specific coding standards using RAG and POML. "
+            "Use for questions about the project's Python naming, "
+            "functions, error handling, and code quality conventions."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The coding standards question to search for.",
+                },
+            },
+            "required": ["question"],
         },
     )
 

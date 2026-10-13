@@ -1,7 +1,7 @@
 
 import json
 from typing import Any
-
+from app.mcp.rag.prompt_builder import build_rag_messages
 from app.providers.base import LLMProvider
 from app.tools.registry import ToolRegistry
 
@@ -52,7 +52,55 @@ class Agent:
             {"role": "user", "content": user_input},
         ]
 
-        tool_definitions = self.tool_registry.get_tool_definitions()
+        standards_keywords = (
+            "coding standards",
+            "coding conventions",
+            "project standards",
+            "naming conventions",
+            "snake_case",
+            "pascalcase",
+            "docstring",
+            "error handling",
+            "code quality",
+            "function names",
+            "variable names",
+            "name python functions",
+            "naming python functions",
+            "python naming",
+            "how should i name",
+        )
+
+        is_standards_question = any(
+            keyword in user_input.lower()
+            for keyword in standards_keywords
+        )
+
+        if is_standards_question:
+            poml_messages = build_rag_messages(user_input)
+            poml_system = next(
+                (
+                    message["content"]
+                    for message in poml_messages
+                    if message["role"] == "system"
+                ),
+                "",
+            )
+            poml_user = next(
+                (
+                    message["content"]
+                    for message in poml_messages
+                    if message["role"] == "user"
+                ),
+                user_input,
+            )
+            messages[0]["content"] += "\n\n" + poml_system
+            messages[1]["content"] = poml_user
+
+        tool_definitions = (
+          []
+          if is_standards_question
+          else self.tool_registry.get_tool_definitions()
+       )
 
         for iteration in range(self.max_iterations):
             response = self.provider.generate(
@@ -60,9 +108,6 @@ class Agent:
                 tools=tool_definitions,
             )
 
-            # Temporary debugging output.
-            print("DEBUG response content:", response.get("content"))
-            print("DEBUG tool calls:", response.get("tool_calls"))
 
             tool_calls = response.get("tool_calls", [])
             content = response.get("content", "") or ""
