@@ -2,15 +2,8 @@
 from app.agent import Agent
 from app.providers.ollama import OllamaProvider
 from app.tools.registry import ToolRegistry
-from app.mcp.rag.tools import search_coding_standards
 from app.tools.terminal import run_command
-from app.tools.filesystem import (
-    read_file,
-    write_file,
-    list_files,
-    search_in_files,
-    edit_file,
-)
+from app.mcp.local_client import call_local_mcp_tool
 from app.mcp.context7_tools import (
     resolve_library_id,
     query_docs,
@@ -19,6 +12,60 @@ from app.mcp.context7_tools import (
 
 def add_numbers(a: int, b: int) -> int:
     return a + b
+
+
+# Filesystem MCP wrappers
+def mcp_read_file(path: str) -> str:
+    return call_local_mcp_tool(
+        "app.mcp.filesystem_server",
+        "read_file",
+        {"path": path},
+    )
+
+
+def mcp_write_file(path: str, content: str) -> str:
+    return call_local_mcp_tool(
+        "app.mcp.filesystem_server",
+        "write_file",
+        {"path": path, "content": content},
+    )
+
+
+def mcp_list_files(path: str = ".") -> str:
+    return call_local_mcp_tool(
+        "app.mcp.filesystem_server",
+        "list_files",
+        {"path": path},
+    )
+
+
+def mcp_search_in_files(path: str, query: str) -> str:
+    return call_local_mcp_tool(
+        "app.mcp.filesystem_server",
+        "search_in_files",
+        {"path": path, "query": query},
+    )
+
+
+def mcp_edit_file(path: str, old_text: str, new_text: str) -> str:
+    return call_local_mcp_tool(
+        "app.mcp.filesystem_server",
+        "edit_file",
+        {
+            "path": path,
+            "old_text": old_text,
+            "new_text": new_text,
+        },
+    )
+
+
+# Local RAG MCP wrapper
+def mcp_search_coding_standards(question: str) -> str:
+    return call_local_mcp_tool(
+        "app.mcp.rag.server",
+        "search_coding_standards",
+        {"question": question},
+    )
 
 
 def build_registry() -> ToolRegistry:
@@ -40,8 +87,8 @@ def build_registry() -> ToolRegistry:
 
     registry.register(
         name="read_file",
-        function=read_file,
-        description="Read a text file inside the project directory.",
+        function=mcp_read_file,
+        description="Read a text file through the filesystem MCP server.",
         parameters={
             "type": "object",
             "properties": {
@@ -53,8 +100,8 @@ def build_registry() -> ToolRegistry:
 
     registry.register(
         name="write_file",
-        function=write_file,
-        description="Create or overwrite a text file inside the project directory.",
+        function=mcp_write_file,
+        description="Create or overwrite a file through the filesystem MCP server.",
         parameters={
             "type": "object",
             "properties": {
@@ -67,8 +114,8 @@ def build_registry() -> ToolRegistry:
 
     registry.register(
         name="list_files",
-        function=list_files,
-        description="List files and folders in a project directory.",
+        function=mcp_list_files,
+        description="List project files through the filesystem MCP server.",
         parameters={
             "type": "object",
             "properties": {
@@ -83,8 +130,8 @@ def build_registry() -> ToolRegistry:
 
     registry.register(
         name="search_in_files",
-        function=search_in_files,
-        description="Search for a text string in files under a project directory.",
+        function=mcp_search_in_files,
+        description="Search project files through the filesystem MCP server.",
         parameters={
             "type": "object",
             "properties": {
@@ -94,64 +141,50 @@ def build_registry() -> ToolRegistry:
             "required": ["path", "query"],
         },
     )
-    
-    registry.register(
-    name="edit_file",
-    function=edit_file,
-    description=(
-        "Replace a specific, unique piece of text in an existing project file. "
-        "Use this to make targeted code changes instead of rewriting a whole file."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "Relative path of the file to edit.",
-            },
-            "old_text": {
-                "type": "string",
-                "description": "Exact existing text to replace.",
-            },
-            "new_text": {
-                "type": "string",
-                "description": "Replacement text.",
-            },
-        },
-        "required": ["path", "old_text", "new_text"],
-    },
-)
-
 
     registry.register(
-    name="run_command",
-    function=run_command,
-    description=(
-        "Run an approved development command in the project directory. "
-        "Allowed commands include pwd, ls, git status, git diff, and pytest."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": (
-                    "The exact command to run, such as 'git status' or 'pwd'."
-                ),
-            }
+        name="edit_file",
+        function=mcp_edit_file,
+        description=(
+            "Replace one unique piece of text in a file through the filesystem "
+            "MCP server. Prefer targeted edits over rewriting whole files."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Relative file path."},
+                "old_text": {"type": "string", "description": "Exact text to replace."},
+                "new_text": {"type": "string", "description": "Replacement text."},
+            },
+            "required": ["path", "old_text", "new_text"],
         },
-        "required": ["command"],
-    },
-)
-    
+    )
+
+    registry.register(
+        name="run_command",
+        function=run_command,
+        description=(
+            "Run an approved development command in the project directory, "
+            "such as pwd, ls, git status, git diff, or pytest."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Approved command to execute.",
+                },
+            },
+            "required": ["command"],
+        },
+    )
+
     registry.register(
         name="resolve_library_id",
         function=resolve_library_id,
         description=(
-            "Find the Context7 documentation library ID for a programming "
-            "library or framework. Use this before query_docs when the "
-            "correct library ID is not already known. The query should "
-            "describe what documentation is needed."
+            "Resolve a programming library to a Context7 library ID. "
+            "Call this before query_docs."
         ),
         parameters={
             "type": "object",
@@ -162,7 +195,7 @@ def build_registry() -> ToolRegistry:
                 },
                 "query": {
                     "type": "string",
-                    "description": "What documentation the user needs.",
+                    "description": "What documentation is needed.",
                 },
             },
             "required": ["libraryName", "query"],
@@ -173,9 +206,8 @@ def build_registry() -> ToolRegistry:
         name="query_docs",
         function=query_docs,
         description=(
-            "Retrieve relevant programming documentation and examples "
-            "from Context7. Resolve the library ID first unless it is "
-            "already known. Use the user's actual question as the query."
+            "Retrieve programming documentation from Context7 using the exact "
+            "library ID returned by resolve_library_id."
         ),
         parameters={
             "type": "object",
@@ -186,7 +218,7 @@ def build_registry() -> ToolRegistry:
                 },
                 "query": {
                     "type": "string",
-                    "description": "The specific documentation question.",
+                    "description": "Specific documentation question.",
                 },
             },
             "required": ["libraryId", "query"],
@@ -195,18 +227,17 @@ def build_registry() -> ToolRegistry:
 
     registry.register(
         name="search_coding_standards",
-        function=search_coding_standards,
+        function=mcp_search_coding_standards,
         description=(
-            "Search project-specific coding standards using RAG and POML. "
-            "Use for questions about the project's Python naming, "
-            "functions, error handling, and code quality conventions."
+            "Search local project coding standards through the RAG MCP server. "
+            "Use for naming, error handling, documentation, and code quality."
         ),
         parameters={
             "type": "object",
             "properties": {
                 "question": {
                     "type": "string",
-                    "description": "The coding standards question to search for.",
+                    "description": "Coding standards question.",
                 },
             },
             "required": ["question"],
@@ -222,7 +253,10 @@ def main():
     agent = Agent(provider, registry)
 
     print("Welcome to CodingAssistant!")
-    print("Available tools: file operations, terminal commands, and Context7 documentation")
+    print(
+        "Available tools: filesystem MCP, coding standards RAG MCP, "
+        "Context7 documentation, and approved terminal commands."
+    )
     print("Type 'exit' to quit.\n")
 
     while True:

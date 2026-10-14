@@ -14,25 +14,36 @@ ALLOWED_COMMANDS = {
     "python -m pytest",
 }
 
-
 def run_command(command: str) -> dict:
     """Run an approved development command in the project directory."""
 
     command = command.strip()
+    parts = command.split()
 
-    # Only accept commands in the allowlist.
-    if command not in ALLOWED_COMMANDS:
+    # Validate the command and its arguments.
+    if not parts:
         return {
             "success": False,
-            "error": (
-                "Command not allowed. Allowed commands: "
-                + ", ".join(sorted(ALLOWED_COMMANDS))
-            ),
+            "error": "Empty command.",
+        }
+
+    executable = parts[0]
+
+    if executable in {"pytest", "ls", "pwd"}:
+        pass
+    elif parts[:3] == ["python", "-m", "pytest"]:
+        pass
+    elif parts[:2] in (["git", "status"], ["git", "diff"]):
+        pass
+    else:
+        return {
+            "success": False,
+            "error": "Command not allowed.",
         }
 
     try:
         result = subprocess.run(
-            command.split(),
+            parts,
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
